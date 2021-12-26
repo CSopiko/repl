@@ -21,9 +21,9 @@ class Observable:
 
 
 class DatabaseSingletonMeta(type):
-    _instances = {}
+    _instances: Dict[Any, "Database"] = {}
 
-    def __call__(cls, *args, **kwargs):
+    def __call__(cls, *args: Any, **kwargs: Any) -> "Database":
         if cls not in cls._instances:
             instance = super().__call__(*args, **kwargs)
             cls._instances[cls] = instance
@@ -31,7 +31,7 @@ class DatabaseSingletonMeta(type):
 
 
 class Database(Protocol):
-    __metaclass__ = DatabaseSingletonMeta
+    __metaclass__: Type[DatabaseSingletonMeta] = DatabaseSingletonMeta
 
     def contains_channel(self, channel: str) -> Union[Observable, None]:
         pass
@@ -110,13 +110,13 @@ def check_io_publishing_format(command: str) -> bool:
 
 
 def extract_io_subscription_format(command: str) -> Tuple[str, str]:
-    user_name = command[command.find("<") + 1 : command.find(">")]
-    channel_name = command[command.rfind("<") + 1 : command.rfind(">")]
+    user_name = command[command.find("<") + 1: command.find(">")]
+    channel_name = command[command.rfind("<") + 1: command.rfind(">")]
     return user_name, channel_name
 
 
 def extract_io_publishing_format(command: str) -> str:
-    channel_name = command[command.find("<") + 1 : command.find(">")]
+    channel_name = command[command.find("<") + 1: command.find(">")]
     return channel_name
 
 
