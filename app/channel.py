@@ -145,6 +145,17 @@ class SubscribeAction(ActionType):
         print(user_name + " subscribed to " + channel_name)
 
 
+@dataclass
+class EmptyAction(ActionType):
+    db: IDatabase
+
+    def is_type(self, command: str) -> bool:
+        return True
+
+    def empty_action(self, s: str) -> None:
+        pass
+
+
 class IInputType(ABC):
     @abstractmethod
     def read_cmd(self) -> str:
@@ -166,6 +177,15 @@ class SubscriptionCommand(Command):
 
     def execute(self, command: str) -> None:
         return self.receiver.subscribe(command)
+
+
+@dataclass
+class EmptyCommand(Command):
+    def __init__(self, receiver: EmptyAction):
+        self.receiver = receiver
+
+    def execute(self, command: str) -> None:
+        pass
 
 
 @dataclass
@@ -192,12 +212,12 @@ class CLI(IInputType):
     def read_cmd(self) -> str:
         return input(">>> ")
 
-    def parse_cmd(self, cmd: str, db: IDatabase) -> Union[Command, None]:
+    def parse_cmd(self, cmd: str, db: IDatabase) -> Command:
         if SubscribeAction(db).is_type(cmd):
             return SubscriptionCommand(SubscribeAction(db))
         if PublishVideoAction(db).is_type(cmd):
             return PublishVideoCommand(PublishVideoAction(db))
-        return None
+        return EmptyCommand(EmptyAction(db))
 
     def run(self, command: Command, cmd: str) -> None:
         command.execute(cmd)
