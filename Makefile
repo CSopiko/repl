@@ -12,7 +12,7 @@ fmt format:
 	black app tests
 
 lint:
-	isort --check app tests
-	black --check app tests
-	flake8 app tests
-	mypy app tests
+	isort --check app tests main.py
+	black --check app tests main.py
+	flake8 app tests main.py
+	mypy app tests main.py
