@@ -1,9 +1,11 @@
+from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Protocol, Set, Tuple, Type, Union
 
 from app.user import ChannelObserver, Printer, User
 
 
+# Observer Pattern
 @dataclass
 class Observable:
     name: str
@@ -16,29 +18,30 @@ class Observable:
         self.observers.remove(observer)
 
     def notify_video_published(self) -> None:
+        print("Notifying subscribers of " + self.name + ":")
         for o in self.observers:
             o.on_video_published()
 
 
+# For Singleton pattern
 class DatabaseSingletonMeta(type):
-    _instances: Dict[Any, "Database"] = {}
+    _instances: Dict["DatabaseSingletonMeta", "IDatabase"] = {}
 
-    def __call__(cls, *args: Any, **kwargs: Any) -> "Database":
+    def __call__(cls, *args: Any, **kwargs: Any) -> "IDatabase":
         if cls not in cls._instances:
             instance = super().__call__(*args, **kwargs)
             cls._instances[cls] = instance
         return cls._instances[cls]
 
 
-class Database(Protocol):
+# Repository Pattern
+class IDatabase(Protocol):
     __metaclass__: Type[DatabaseSingletonMeta] = DatabaseSingletonMeta
 
-    def contains_channel(self, channel: str) -> Union[Observable, None]:
+    def contains_channel(self, channel: str) -> Observable:
         pass
 
-    def add_user_to_channel(
-        self, channel: Union[Observable, Any, None], user: str
-    ) -> None:
+    def add_user_to_channel(self, channel: Observable, user: str) -> None:
         pass
 
 
@@ -50,46 +53,35 @@ class InMemDatabase:
     def __init__(self) -> None:
         self.db = {}
 
-    def contains_channel(self, channel: str) -> Union[Observable, None]:
-        if channel in self.db:
-            return self.db[channel][0]
-        else:
-            return None
+    def contains_channel(self, channel: str) -> Observable:
+        if channel not in self.db:
+            self.db[channel] = (Observable(channel), [])
+        return self.db[channel][0]
 
-    def add_user_to_channel(
-        self, channel: Union[Observable, Any, None], user: str
-    ) -> None:
+    def add_user_to_channel(self, channel: Observable, user: str) -> None:
         if not isinstance(channel, Observable):
             return
         if self.contains_channel(channel.name):
-            self.db[channel.name][1].append(user)
+            self.db[channel.name][1].append(User(user))
         else:
-            self.db[channel.name] = (channel, [user])
+            self.db[channel.name] = (channel, [User(user)])
 
 
-class CommandType(Protocol):
-    type_format: Callable[[str], bool]
-    extraction_format: Callable[[str], Any]
-    db: InMemDatabase
-
+class ActionType:
+    @abstractmethod
     def is_type(self, command: str) -> bool:
         pass
 
+
+# Command Pattern
+class Command:
+    @abstractmethod
     def execute(self, command: str) -> None:
         pass
 
 
-class Command(Protocol):
-    def read_command(self) -> None:
-        pass
-
-    def evaluate_command(self, command: str, db: InMemDatabase) -> CommandType:
-        pass
-
-    def print_command(self, command_type: CommandType, command_str: str) -> None:
-        pass
-
-
+# Strategy pattern
+# Strategies for input format
 def check_io_subscription_format(command: str) -> bool:
     # subscribe <username> to <channel>
     return (
@@ -109,83 +101,103 @@ def check_io_publishing_format(command: str) -> bool:
     )
 
 
+# Strategies for extraction format
 def extract_io_subscription_format(command: str) -> Tuple[str, str]:
-    user_name = command[command.find("<") + 1: command.find(">")]
-    channel_name = command[command.rfind("<") + 1: command.rfind(">")]
+    user_name = command[command.find("<") + 1 : command.find(">")]
+    channel_name = command[command.rfind("<") + 1 : command.rfind(">")]
     return user_name, channel_name
 
 
 def extract_io_publishing_format(command: str) -> str:
-    channel_name = command[command.find("<") + 1: command.find(">")]
+    channel_name = command[command.find("<") + 1 : command.find(">")]
     return channel_name
 
 
 @dataclass
-class SubscriptionCommand:
-    db: Database
-    type_format: Callable[[str], bool] = check_io_subscription_format
-    extraction_format: Callable[[str], Tuple[str, str]] = extract_io_subscription_format
-
-    def execute(self, command: str) -> bool:
-        return self._subscribe(command)
-
-    def is_type(self, command: str) -> bool:
-        return self.type_format(command)
-
-    def _subscribe(self, s: str) -> bool:
-        user_name, channel_name = self.extraction_format(s)
-        channel = (
-            self.db.contains_channel(channel_name)
-            if self.db.contains_channel(channel_name) is not None
-            else Observable(channel_name)
-        )
-        if channel is None:
-            return False
-        channel.attach(Printer(User(user_name)))
-        self.db.add_user_to_channel(channel, user_name)
-        print(user_name + " subscribed to " + channel_name)
-        return True
-
-
-@dataclass
-class VideoPublisherCommand:
-    db: Database
+class PublishVideoAction(ActionType):
+    db: IDatabase
     type_format: Callable[[str], bool] = check_io_publishing_format
     extraction_format: Callable[[str], str] = extract_io_publishing_format
 
-    def execute(self, command: str) -> bool:
-        return self._publish_video(command)
+    def is_type(self, command: str) -> bool:
+        return self.type_format(command)
+
+    def publish_video(self, s: str) -> None:
+        channel_name = self.extraction_format(s)
+        channel = self.db.contains_channel(channel_name)
+        channel.notify_video_published()
+
+
+@dataclass
+class SubscribeAction(ActionType):
+    db: IDatabase
+    type_format: Callable[[str], bool] = check_io_subscription_format
+    extraction_format: Callable[[str], Tuple[str, str]] = extract_io_subscription_format
 
     def is_type(self, command: str) -> bool:
         return self.type_format(command)
 
-    def _publish_video(self, s: str) -> bool:
-        channel_name = self.extraction_format(s)
+    def subscribe(self, s: str) -> None:
+        user_name, channel_name = self.extraction_format(s)
         channel = self.db.contains_channel(channel_name)
-
-        if channel is None:
-            return False
-
-        print("Notifying subscribers of " + channel_name + ":")
-        channel.notify_video_published()
-        return True
+        channel.attach(Printer(User(user_name)))
+        self.db.add_user_to_channel(channel, user_name)
+        print(user_name + " subscribed to " + channel_name)
 
 
-COMMAND_TYPES: List[Union[Type[SubscriptionCommand], Type[VideoPublisherCommand]]] = [
+class IInputType:
+    @abstractmethod
+    def read_cmd(self) -> str:
+        pass
+
+    @abstractmethod
+    def parse_cmd(self, cmd: str, db: IDatabase) -> Union[Command, None]:
+        pass
+
+    @abstractmethod
+    def run(self, command: Command, cmd: str) -> None:
+        pass
+
+
+@dataclass
+class SubscriptionCommand(Command):
+    def __init__(self, receiver: SubscribeAction):
+        self.receiver = receiver
+
+    def execute(self, command: str) -> None:
+        return self.receiver.subscribe(command)
+
+
+@dataclass
+class PublishVideoCommand(Command):
+    def __init__(self, receiver: PublishVideoAction):
+        self.receiver = receiver
+
+    def execute(self, command: str) -> None:
+        return self.receiver.publish_video(command)
+
+
+ACTION_TYPES: List[Union[Type[SubscribeAction], Type[PublishVideoAction]]] = [
+    SubscribeAction,
+    PublishVideoAction,
+]
+
+COMMAND_TYPES: List[Union[Type[SubscriptionCommand], Type[PublishVideoCommand]]] = [
     SubscriptionCommand,
-    VideoPublisherCommand,
+    PublishVideoCommand,
 ]
 
 
-class IOCommand:
-    def read_command(self) -> str:
-        return input()
+class CLI(IInputType):
+    def read_cmd(self) -> str:
+        return input(">>> ")
 
-    def evaluate_command(self, command: str, db: Database) -> Any:
-        for c in COMMAND_TYPES:
-            if c(db).is_type(command):
-                return c(db)
+    def parse_cmd(self, cmd: str, db: IDatabase) -> Union[Command, None]:
+        if SubscribeAction(db).is_type(cmd):
+            return SubscriptionCommand(SubscribeAction(db))
+        if PublishVideoAction(db).is_type(cmd):
+            return PublishVideoCommand(PublishVideoAction(db))
         return None
 
-    def print_command(self, command_type: CommandType, command_str: str) -> None:
-        command_type.execute(command_str)
+    def run(self, command: Command, cmd: str) -> None:
+        command.execute(cmd)

@@ -22,7 +22,7 @@ class Printer:
     user: User
 
     def on_video_published(self) -> None:
-        print(self.user.username)
+        print("\t" + self.user.username)
 
     def __hash__(self) -> int:
         return (str(self.user) + "_" + "Printer").__hash__()

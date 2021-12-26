@@ -1,13 +1,13 @@
-from app.channel import InMemDatabase, IOCommand
+from app.channel import CLI, IDatabase
 
 
-def repl(db: InMemDatabase) -> None:
+def repl(db: IDatabase) -> None:
     while True:
         # read command
-        command_str = IOCommand().read_command()
-        if command_str == "":
+        cmd = CLI().read_cmd()
+        if cmd == "":
             break
         # evaluate
-        command_type = IOCommand().evaluate_command(command_str, db)
+        command = CLI().parse_cmd(cmd, db)
         # print
-        IOCommand().print_command(command_type, command_str)
+        CLI().run(command, cmd)
