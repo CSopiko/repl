@@ -1,3 +1,5 @@
+import os
+import pickle
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Protocol, Set, Tuple, Type, Union
@@ -47,25 +49,68 @@ class IDatabase(Protocol):
 
 
 @dataclass
+class PKLDatabase:
+    __metaclass__ = DatabaseSingletonMeta
+
+    def __init__(
+        self,
+        pkl_path: str = "database/database.pkl",
+        db: Dict[str, Observable] = {},
+    ) -> None:
+        self.db = db
+        self.db_path = pkl_path
+        if not os.path.exists(self.db_path):
+            with open(self.db_path, "wb") as f:
+                pickle.dump(self.db, f)
+
+    def contains_channel(self, channel: str) -> Observable:
+        with open(self.db_path, "rb") as f:
+            self.db = pickle.load(f)
+
+        if channel not in self.db:
+            self.db[channel] = Observable(channel)
+
+        with open(self.db_path, "wb") as f:
+            pickle.dump(self.db, f)
+        return self.db[channel]
+
+    def add_user_to_channel(self, channel: Observable, user: str) -> None:
+        with open(self.db_path, "rb") as f:
+            self.db = pickle.load(f)
+
+        if not isinstance(channel, Observable):
+            return
+        if self.contains_channel(channel.name):
+            self.db[channel.name].attach(Printer(User(user)))
+        else:
+            self.db[channel.name] = channel
+            self.db[channel.name].attach(Printer(User(user)))
+
+        with open(self.db_path, "wb") as f:
+            pickle.dump(self.db, f)
+
+
+@dataclass
 class InMemDatabase:
     __metaclass__ = DatabaseSingletonMeta
-    db: Dict[str, Tuple[Observable, list[User]]]
+    db: Dict[str, Observable]
 
     def __init__(self) -> None:
         self.db = {}
 
     def contains_channel(self, channel: str) -> Observable:
         if channel not in self.db:
-            self.db[channel] = (Observable(channel), [])
-        return self.db[channel][0]
+            self.db[channel] = Observable(channel)
+        return self.db[channel]
 
     def add_user_to_channel(self, channel: Observable, user: str) -> None:
         if not isinstance(channel, Observable):
             return
         if self.contains_channel(channel.name):
-            self.db[channel.name][1].append(User(user))
+            self.db[channel.name].attach(Printer(User(user)))
         else:
-            self.db[channel.name] = (channel, [User(user)])
+            self.db[channel.name] = channel
+            self.db[channel.name].attach(Printer(User(user)))
 
 
 class ActionType:
