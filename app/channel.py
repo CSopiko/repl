@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Protocol, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Protocol, Set, Tuple, Union
 
 from app.user import ChannelObserver, Printer, User
 
@@ -46,6 +46,7 @@ class Database:
 
 class CommandType(Protocol):
     type_format: Callable[[str], bool]
+    extraction_format: Callable[[str], Any]
     db: Database
 
     def is_type(self, command: str) -> bool:
@@ -85,10 +86,22 @@ def check_io_publishing_format(command: str) -> bool:
     )
 
 
+def extract_io_subscription_format(command: str) -> Tuple[str, str]:
+    user_name = command[command.find("<") + 1 : command.find(">")]
+    channel_name = command[command.rfind("<") + 1 : command.rfind(">")]
+    return user_name, channel_name
+
+
+def extract_io_publishing_format(command: str) -> str:
+    channel_name = command[command.find("<") + 1 : command.find(">")]
+    return channel_name
+
+
 @dataclass
 class SubscriptionCommand:
     db: Database
     type_format: Callable[[str], bool] = check_io_subscription_format
+    extraction_format: Callable[[str], Tuple[str, str]] = extract_io_subscription_format
 
     def execute(self, command: str) -> bool:
         return self._subscribe(command)
@@ -97,8 +110,7 @@ class SubscriptionCommand:
         return self.type_format(command)
 
     def _subscribe(self, s: str) -> bool:
-        user_name = s[s.find("<") + 1 : s.find(">")]
-        channel_name = s[s.rfind("<") + 1 : s.rfind(">")]
+        user_name, channel_name = self.extraction_format(s)
         channel = (
             self.db.contains_channel(channel_name)
             if self.db.contains_channel(channel_name) is not None
@@ -117,6 +129,7 @@ class SubscriptionCommand:
 class VideoPublisherCommand:
     db: Database
     type_format: Callable[[str], bool] = check_io_publishing_format
+    extraction_format: Callable[[str], str] = extract_io_publishing_format
 
     def execute(self, command: str) -> bool:
         return self._publish_video(command)
@@ -125,7 +138,7 @@ class VideoPublisherCommand:
         return self.type_format(command)
 
     def _publish_video(self, s: str) -> bool:
-        channel_name = s[s.find("<") + 1 : s.find(">")]
+        channel_name = self.extraction_format(s)
         channel = self.db.contains_channel(channel_name)
 
         if channel is None:
@@ -136,6 +149,9 @@ class VideoPublisherCommand:
         return True
 
 
+COMMAND_TYPES: List[CommandType] = [SubscriptionCommand, VideoPublisherCommand]
+
+
 class IOCommand:
     def read_command(self) -> str:
         return input()
@@ -143,10 +159,9 @@ class IOCommand:
     def evaluate_command(
         self, command: str, db: Database
     ) -> Union[SubscriptionCommand, VideoPublisherCommand, None]:
-        if SubscriptionCommand(db, check_io_subscription_format).is_type(command):
-            return SubscriptionCommand(db, check_io_subscription_format)
-        if VideoPublisherCommand(db, check_io_publishing_format).is_type(command):
-            return VideoPublisherCommand(db, check_io_publishing_format)
+        for c in COMMAND_TYPES:
+            if c(db).is_type(command):
+                return c(db)
         return None
 
     def print_command(self, command_type: CommandType, command_str: str) -> None:
