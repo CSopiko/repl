@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Protocol, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Protocol, Set, Tuple, Type, Union
 
 from app.user import ChannelObserver, Printer, User
 
@@ -18,6 +18,16 @@ class Observable:
     def notify_video_published(self) -> None:
         for o in self.observers:
             o.on_video_published()
+
+
+class Database(Protocol):
+    def contains_channel(self, channel: str) -> Union[Observable, None]:
+        pass
+
+    def add_user_to_channel(
+        self, channel: Union[Observable, Any, None], user: str
+    ) -> None:
+        pass
 
 
 @dataclass
@@ -99,7 +109,7 @@ def extract_io_publishing_format(command: str) -> str:
 
 @dataclass
 class SubscriptionCommand:
-    db: InMemDatabase
+    db: Database
     type_format: Callable[[str], bool] = check_io_subscription_format
     extraction_format: Callable[[str], Tuple[str, str]] = extract_io_subscription_format
 
@@ -126,7 +136,7 @@ class SubscriptionCommand:
 
 @dataclass
 class VideoPublisherCommand:
-    db: InMemDatabase
+    db: Database
     type_format: Callable[[str], bool] = check_io_publishing_format
     extraction_format: Callable[[str], str] = extract_io_publishing_format
 
@@ -148,16 +158,17 @@ class VideoPublisherCommand:
         return True
 
 
-COMMAND_TYPES: List[CommandType] = [SubscriptionCommand, VideoPublisherCommand]
+COMMAND_TYPES: List[Union[Type[SubscriptionCommand], Type[VideoPublisherCommand]]] = [
+    SubscriptionCommand,
+    VideoPublisherCommand,
+]
 
 
 class IOCommand:
     def read_command(self) -> str:
         return input()
 
-    def evaluate_command(
-        self, command: str, db: InMemDatabase
-    ) -> Union[SubscriptionCommand, VideoPublisherCommand, None]:
+    def evaluate_command(self, command: str, db: Database) -> Any:
         for c in COMMAND_TYPES:
             if c(db).is_type(command):
                 return c(db)
