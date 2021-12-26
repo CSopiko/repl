@@ -1,7 +1,7 @@
-from app.channel import Database, IOCommand
+from app.channel import InMemDatabase, IOCommand
 
 
-def repl(db: Database) -> None:
+def repl(db: InMemDatabase) -> None:
     while True:
         # read command
         command_str = IOCommand().read_command()

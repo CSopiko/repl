@@ -21,7 +21,7 @@ class Observable:
 
 
 @dataclass
-class Database:
+class InMemDatabase:
     db: Dict[str, Tuple[Observable, list[User]]]
 
     def __init__(self) -> None:
@@ -47,7 +47,7 @@ class Database:
 class CommandType(Protocol):
     type_format: Callable[[str], bool]
     extraction_format: Callable[[str], Any]
-    db: Database
+    db: InMemDatabase
 
     def is_type(self, command: str) -> bool:
         pass
@@ -60,7 +60,7 @@ class Command(Protocol):
     def read_command(self) -> None:
         pass
 
-    def evaluate_command(self, command: str, db: Database) -> CommandType:
+    def evaluate_command(self, command: str, db: InMemDatabase) -> CommandType:
         pass
 
     def print_command(self, command_type: CommandType, command_str: str) -> None:
@@ -99,7 +99,7 @@ def extract_io_publishing_format(command: str) -> str:
 
 @dataclass
 class SubscriptionCommand:
-    db: Database
+    db: InMemDatabase
     type_format: Callable[[str], bool] = check_io_subscription_format
     extraction_format: Callable[[str], Tuple[str, str]] = extract_io_subscription_format
 
@@ -118,7 +118,6 @@ class SubscriptionCommand:
         )
         if channel is None:
             return False
-        # channel = Observable(channel_name)
         channel.attach(Printer(User(user_name)))
         self.db.add_user_to_channel(channel, user_name)
         print(user_name + " subscribed to " + channel_name)
@@ -127,7 +126,7 @@ class SubscriptionCommand:
 
 @dataclass
 class VideoPublisherCommand:
-    db: Database
+    db: InMemDatabase
     type_format: Callable[[str], bool] = check_io_publishing_format
     extraction_format: Callable[[str], str] = extract_io_publishing_format
 
@@ -157,7 +156,7 @@ class IOCommand:
         return input()
 
     def evaluate_command(
-        self, command: str, db: Database
+        self, command: str, db: InMemDatabase
     ) -> Union[SubscriptionCommand, VideoPublisherCommand, None]:
         for c in COMMAND_TYPES:
             if c(db).is_type(command):
