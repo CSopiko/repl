@@ -1,4 +1,4 @@
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Protocol, Set, Tuple, Type, Union
 
@@ -145,7 +145,7 @@ class SubscribeAction(ActionType):
         print(user_name + " subscribed to " + channel_name)
 
 
-class IInputType:
+class IInputType(ABC):
     @abstractmethod
     def read_cmd(self) -> str:
         pass
