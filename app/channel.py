@@ -36,6 +36,7 @@ class DatabaseSingletonMeta(type):
 
 # Repository Pattern
 class IDatabase(Protocol):
+    db: Any
     __metaclass__: Type[DatabaseSingletonMeta] = DatabaseSingletonMeta
 
     def contains_channel(self, channel: str) -> Observable:
